@@ -4,17 +4,24 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
-const generateTokens = asyncHandler(async (userId) => {
-    const user = await User.findById({ _id: userId });
+const generateTokens = async (userId) => {
+    try {
+        const user = await User.findById({ _id: userId });
 
-    const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
 
-    user.refreshToken = refreshToken;
-    await user.save({ validateBeforeSave: false });
+        user.refreshToken = refreshToken;
+        await user.save({ validateBeforeSave: false });
 
-    return { accessToken, refreshToken };
-});
+        return { accessToken, refreshToken };
+    } catch (error) {
+        throw new ApiError(
+            500,
+            "Something went wrong while generating refresh and access tokens"
+        );
+    }
+};
 
 const registerUser = asyncHandler(async (req, res) => {
     const { erno, email, fullname, profilePicture, password } = req.body;
@@ -83,17 +90,52 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
     const { email, password, cpassword } = req.body;
 
-    if ([email, password, cpassword].some((field) => field?.trim() === "")) {
-        throw new ApiError(400, "All fields are required!");
+    try {
+        if (
+            [email, password, cpassword].some((field) => field?.trim() === "")
+        ) {
+            throw new ApiError(400, "All fields are required!");
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            throw new ApiError(400, "user not found with this email");
+        }
+
+        const isPassValid = await user.isPasswordCorrect(password);
+
+        if (!isPassValid) throw new ApiError(400, "Password is not correct!");
+
+        const { accessToken, refreshToken } = await generateTokens(user._id);
+
+        const loggedInUser = await User.findById({ _id: user._id }).select(
+            "-password"
+        );
+
+        // console.log(loggedInUser);
+        // console.log("accessToken: ", accessToken);
+        // console.log("refreshToken: ", refreshToken);
+
+        const options = {
+            httpOnly: true,
+            secure: true,
+        };
+
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(
+                new ApiResponse(
+                    200,
+                    { user: loggedInUser, accessToken, refreshToken },
+                    "User loggedIn successfully"
+                )
+            );
+    } catch (error) {
+        throw new ApiError(500, "Error while  login");
     }
-
-    const user = await User.findOne({ email });
-
-    if (!user) {
-        throw new ApiError(400, "user not found with this email");
-    }
-
-    const { accessToken, refreshToken } = generateTokens(user._id);
 });
 
 export { registerUser, loginUser };
