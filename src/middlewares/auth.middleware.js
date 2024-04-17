@@ -22,7 +22,10 @@ const verifyJWT = asyncHandler(async (req, _, next) => {
         req.user = user;
         next();
     } catch (error) {
-        throw new ApiError(401, error?.message || "Invalid access token");
+        throw new ApiError(
+            401,
+            error?.message || "Not logged In or Invalid access token"
+        );
     }
 });
 

@@ -32,6 +32,11 @@ const userSchema = new Schema(
             type: String,
             required: [true, "Password is required"],
         },
+        role: {
+            type: String,
+            enum: ["user", "superadmin"],
+            default: "user",
+        },
         refreshToken: {
             type: String,
         },
