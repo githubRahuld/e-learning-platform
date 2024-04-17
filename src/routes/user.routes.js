@@ -3,6 +3,7 @@ import {
     loginUser,
     logoutUser,
     registerUser,
+    verifyOtp,
 } from "../controllers/user.controllers.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
@@ -18,5 +19,6 @@ router
 
 router.route("/login").post(loginUser);
 router.route("/logout").post(verifyJWT, logoutUser);
+router.route("/verify-otp").post(verifyOtp);
 
 export default router;

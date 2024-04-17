@@ -1,8 +1,34 @@
+import { Otp } from "../models/otp.model.js";
 import { User } from "../models/user.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { Resend } from "resend";
+
+function generateOTP() {
+    // Generate a random number between 0 and 9999
+    const randomNum = Math.floor(Math.random() * 10000);
+
+    // Ensure the number is 4 digits by adding 1000 if necessary
+    return randomNum.toString().padStart(4, "0");
+}
+
+const sendEmail = asyncHandler(async (email, otp) => {
+    console.log("INside send email");
+    console.log(email);
+    console.log(otp);
+
+    let to = email;
+    const resend = new Resend("re_5Pm4bwQa_79gk89tcbMNnqu5n5dSRZbd5");
+
+    resend.emails.send({
+        from: "onboarding@resend.dev",
+        to: `${to}`,
+        subject: "Hello World",
+        html: `<h1>Your OTP: <strong>${otp}</strong></h1> <p>Expire in 1 minute</p>`,
+    });
+});
 
 const generateTokens = async (userId) => {
     try {
@@ -90,52 +116,101 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
     const { email, password, cpassword } = req.body;
 
-    try {
-        if (
-            [email, password, cpassword].some((field) => field?.trim() === "")
-        ) {
-            throw new ApiError(400, "All fields are required!");
-        }
-
-        const user = await User.findOne({ email });
-
-        if (!user) {
-            throw new ApiError(400, "user not found with this email");
-        }
-
-        const isPassValid = await user.isPasswordCorrect(password);
-
-        if (!isPassValid) throw new ApiError(400, "Password is not correct!");
-
-        const { accessToken, refreshToken } = await generateTokens(user._id);
-
-        const loggedInUser = await User.findById({ _id: user._id }).select(
-            "-password"
-        );
-
-        // console.log(loggedInUser);
-        // console.log("accessToken: ", accessToken);
-        // console.log("refreshToken: ", refreshToken);
-
-        const options = {
-            httpOnly: true,
-            secure: true,
-        };
-
-        return res
-            .status(200)
-            .cookie("accessToken", accessToken, options)
-            .cookie("refreshToken", refreshToken, options)
-            .json(
-                new ApiResponse(
-                    200,
-                    { user: loggedInUser, accessToken, refreshToken },
-                    "User loggedIn successfully"
-                )
-            );
-    } catch (error) {
-        throw new ApiError(500, "Error while  login");
+    if ([email, password, cpassword].some((field) => field?.trim() === "")) {
+        throw new ApiError(400, "All fields are required!");
     }
+
+    if (password != cpassword) {
+        throw new ApiError(400, "Password not matched");
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+        throw new ApiError(400, "user not found with this email");
+    }
+
+    const isPassValid = await user.isPasswordCorrect(password);
+
+    if (!isPassValid) throw new ApiError(400, "Password is not correct!");
+
+    const newOtp = await Otp.create({
+        userId: user._id,
+        otp: generateOTP(),
+        expiresAt: Date.now() + 60000, // Expires in 1 min
+    });
+    console.log("new otp : ", newOtp);
+    console.log(user);
+    console.log(newOtp.otp);
+
+    // sendEmail(user.email, newOtp.otp);
+
+    // console.log(loggedInUser);
+    // console.log("accessToken: ", accessToken);
+    // console.log("refreshToken: ", refreshToken);
+
+    return res
+        .status(200)
+
+        .json(
+            new ApiResponse(
+                200,
+                {},
+                "Enter otp to logIn on OTP Verification API"
+            )
+        );
+});
+
+const verifyOtp = asyncHandler(async (req, res) => {
+    const { userId, otp } = req.body;
+
+    if (!userId || !otp) {
+        throw new ApiError(400, "Missing required parameters: userId and otp");
+    }
+
+    const user = await User.findOne({ _id: userId });
+    console.log("User: ", user);
+
+    // Find the OTP document associated with the user ID
+    const otpDoc = await Otp.findOne({ userId });
+
+    if (!otpDoc) {
+        throw new ApiError(400, "Invalid OTP or user not found");
+    }
+    console.log("otpDoc: ", otpDoc);
+
+    // Check if OTP is valid and not expired
+    if (otpDoc.otp != otp || otpDoc.expiresAt < Date.now()) {
+        throw new ApiError(400, "Invalid OTP or OTP expired");
+    }
+
+    // OTP verification successful - generate tokens and user response
+    const { accessToken, refreshToken } = await generateTokens(user._id);
+    const loggedInUser = await User.findById({ _id: userId }).select(
+        "-password -refreshToken"
+    );
+
+    console.log("loggedInUser", loggedInUser);
+
+    // Delete the used OTP document
+    await otpDoc.deleteOne();
+
+    const options = {
+        httpOnly: true,
+        secure: true,
+    };
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                { user: loggedInUser, accessToken, refreshToken },
+                "User loggedIn successfully"
+            )
+        );
 });
 
 // to logout user, remove refresh token from db
@@ -163,7 +238,7 @@ const logoutUser = asyncHandler(async (req, res) => {
         .status(200)
         .clearCookie("accessToken", options)
         .clearCookie("refreshToken", options)
-        .json(new ApiResponse(200, user, "User logout successfully"));
+        .json(new ApiResponse(200, {}, "User logout successfully"));
 });
 
-export { registerUser, loginUser, logoutUser };
+export { registerUser, loginUser, logoutUser, verifyOtp };
