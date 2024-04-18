@@ -4,6 +4,7 @@ import {
     loginUser,
     logoutUser,
     registerUser,
+    update,
     verifyOtp,
 } from "../controllers/user.controllers.js";
 import { upload } from "../middlewares/multer.middleware.js";
@@ -22,6 +23,7 @@ router
 router.route("/login").post(loginUser);
 router.route("/logout").post(verifyJWT, logoutUser);
 router.route("/verify-otp").post(verifyOtp);
+router.route("/update").post(verifyJWT, update);
 router
     .route("/assign-superadmin/:userId")
     .patch(verifyAdmin, assignSuperadminRole);

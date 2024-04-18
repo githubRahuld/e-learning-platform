@@ -1,5 +1,6 @@
 import { Course } from "../models/course.model.js";
 import { Enrollment } from "../models/enrollment.model.js";
+import { User } from "../models/user.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -13,6 +14,12 @@ const addCourse = asyncHandler(async (req, res) => {
         )
     ) {
         throw new ApiError("All fields are required! ");
+    }
+
+    const user = await User.findById({ _id: req.user?._id });
+
+    if (user.role != "superadmin") {
+        throw new ApiError(404, "Not authorized to add course");
     }
 
     const existingCourse = await Course.findOne({ title });
@@ -117,12 +124,13 @@ const enrollInCourse = asyncHandler(async (req, res) => {
 });
 
 const getALlEnrolledCourses = asyncHandler(async (req, res) => {
-    const { userId } = req.body;
-    if (!userId) {
+    const user = await User.findById({ _id: req.user?._id });
+
+    if (!user) {
         throw new ApiError(400, "UserId required!");
     }
 
-    const allCourses = await Enrollment.find({ userId });
+    const allCourses = await Enrollment.find({ userId: user._id });
     console.log("enrolled courses: ", allCourses);
 
     if (allCourses.length == 0) {
@@ -148,4 +156,65 @@ const getALlEnrolledCourses = asyncHandler(async (req, res) => {
         );
 });
 
-export { addCourse, getAllCourses, enrollInCourse, getALlEnrolledCourses };
+const updateCourse = asyncHandler(async (req, res) => {
+    const courseId = req.params.courseId;
+    const { title, category, level, description } = req.body;
+
+    if (
+        [title, category, level, description, courseId].some(
+            (field) => field?.trim() === ""
+        )
+    ) {
+        throw new ApiError("All fields are required! ");
+    }
+
+    let course = await Course.findById({ _id: courseId });
+    if (!course) {
+        throw new ApiError(404, "Course not found.");
+    }
+
+    const updateData = await Course.findByIdAndUpdate(
+        courseId,
+        {
+            title: title,
+            category: category,
+            level: level,
+            description: description,
+        },
+        {
+            new: true,
+        }
+    );
+
+    if (!updateData) {
+        throw new ApiError(400, "All fields are not provided! ");
+    }
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, updateData, "Successfully updated course "));
+});
+
+const deleteCourse = asyncHandler(async (req, res) => {
+    const courseId = req.params.courseId;
+
+    let course = await Course.findById({ _id: courseId });
+    if (!course) {
+        throw new ApiError(404, "Course not found.");
+    }
+
+    await course.deleteOne();
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, { course }, "Successfully deleted course "));
+});
+
+export {
+    addCourse,
+    getAllCourses,
+    enrollInCourse,
+    getALlEnrolledCourses,
+    updateCourse,
+    deleteCourse,
+};

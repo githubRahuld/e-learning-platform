@@ -190,7 +190,7 @@ const verifyOtp = asyncHandler(async (req, res) => {
     console.log("loggedInUser", loggedInUser);
 
     // Delete the used OTP document
-    await otpDoc.deleteOne();
+    await otpDoc.deleteOne({ userId: userId });
 
     const options = {
         httpOnly: true,
@@ -257,4 +257,48 @@ const assignSuperadminRole = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, {}, "Role changed to superadmin"));
 });
 
-export { registerUser, loginUser, logoutUser, verifyOtp, assignSuperadminRole };
+const update = asyncHandler(async (req, res) => {
+    const { fullname, email } = req.body;
+
+    if (!(fullname || email)) {
+        throw new ApiError("Required fields");
+    }
+
+    const user = await User.findByIdAndUpdate(
+        { _id: req.user?._id },
+        {
+            $set: {
+                fullname,
+                email,
+            },
+        },
+        { new: true }
+    );
+
+    if (!user) {
+        throw new ApiError("User not found");
+    }
+
+    const updatedUser = await User.findById({ _id: user._id }).select(
+        "-password -refreshToken"
+    );
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                updatedUser,
+                "User details updated successfully"
+            )
+        );
+});
+
+export {
+    registerUser,
+    loginUser,
+    logoutUser,
+    verifyOtp,
+    assignSuperadminRole,
+    update,
+};
