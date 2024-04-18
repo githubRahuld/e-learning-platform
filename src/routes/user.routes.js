@@ -5,6 +5,7 @@ import {
     logoutUser,
     registerUser,
     update,
+    updateAvatar,
     verifyOtp,
 } from "../controllers/user.controllers.js";
 import { upload } from "../middlewares/multer.middleware.js";
@@ -27,5 +28,9 @@ router.route("/update").post(verifyJWT, update);
 router
     .route("/assign-superadmin/:userId")
     .patch(verifyAdmin, assignSuperadminRole);
+
+router
+    .route("/update-avatar")
+    .patch(upload.single("profilePicture"), verifyJWT, updateAvatar);
 
 export default router;

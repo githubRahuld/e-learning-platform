@@ -294,6 +294,43 @@ const update = asyncHandler(async (req, res) => {
         );
 });
 
+const updateAvatar = asyncHandler(async (req, res) => {
+    const profilePicturePath = req.file?.path;
+    if (!profilePicturePath) {
+        throw new ApiError(400, "Avatar file is missing");
+    }
+
+    const avatar = await uploadOnCloudinary(profilePicturePath);
+
+    if (!avatar) {
+        throw new ApiError(400, "Avatar not uploaded!");
+    }
+
+    const user = await User.findByIdAndUpdate(
+        { _id: req.user._id },
+        {
+            $set: {
+                profilePicture: avatar.url,
+            },
+        },
+        { new: true }
+    );
+
+    if (!user) {
+        throw new ApiError(400, "user not found");
+    }
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                user.profilePicture,
+                "Profile picture updated sucessfully"
+            )
+        );
+});
+
 export {
     registerUser,
     loginUser,
@@ -301,4 +338,5 @@ export {
     verifyOtp,
     assignSuperadminRole,
     update,
+    updateAvatar,
 };
